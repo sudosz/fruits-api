@@ -1,0 +1,44 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - unparam
+    - wastedassign
+  settings:
+    gosec:
+      excludes:
+        # G104 duplicates errcheck, which is already on by default.
+        - G104
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+  exclusions:
+    rules:
+      # Test code may ignore close errors and use fixed credentials.
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
