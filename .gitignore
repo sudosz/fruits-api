@@ -1,0 +1,54 @@
+# Local agent / knowledge files
+KNOWLEDGE_BASE.md
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.cursor/
+.aider*
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build output
+/bin/
+/build/
+/dist/
+fruits-api
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test & coverage
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+vendor/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs & temp
+*.log
+tmp/
+.tmp/
+
+# Editors & OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
