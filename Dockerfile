@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# gin v1.12 and the swaggo toolchain require Go 1.25, so the builder tracks it.
+# The module tracks Go 1.26, which the patched golang.org/x dependencies require.
 # TARGETOS/TARGETARCH come from buildx, which is how the multi-arch images
 # (linux/amd64 + linux/arm64) are produced without emulating the compiler.
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
