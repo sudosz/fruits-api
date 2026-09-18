@@ -4,8 +4,16 @@ metadata:
   name: fruits-api
   labels:
     app: fruits-api
+    app.kubernetes.io/name: fruits-api
+    app.kubernetes.io/part-of: fruits-api
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: fruits-api
@@ -13,14 +21,30 @@ spec:
     metadata:
       labels:
         app: fruits-api
+        app.kubernetes.io/name: fruits-api
+        app.kubernetes.io/part-of: fruits-api
     spec:
+      serviceAccountName: fruits-api
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Spread replicas so a single node failure cannot take the API down.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: fruits-api
       containers:
-        - name: fruits-api
+        - name: api
           image: ghcr.io/sudosz/fruits-api:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
@@ -29,19 +53,27 @@ spec:
                 name: fruits-api-config
             - secretRef:
                 name: fruits-api-secret
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
           readinessProbe:
             httpGet:
               path: /healthz
               port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
             failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
-            initialDelaySeconds: 15
-            periodSeconds: 20
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
             failureThreshold: 3
           resources:
             requests:
@@ -52,6 +84,18 @@ spec:
               cpu: 200m
           securityContext:
             allowPrivilegeEscalation: false
+            privileged: false
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
             capabilities:
-              drop: ["ALL"]
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,74 @@
+---
+# Default deny for every pod in the namespace, so nothing is reachable unless
+# a policy below explicitly allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    app.kubernetes.io/part-of: fruits-api
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Postgres accepts connections only from the API pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allow-api
+  labels:
+    app.kubernetes.io/part-of: fruits-api
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: fruits-api
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# The API accepts HTTP from anywhere (it is fronted by a NodePort Service) and
+# may only egress to Postgres and DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fruits-api-traffic
+  labels:
+    app.kubernetes.io/part-of: fruits-api
+spec:
+  podSelector:
+    matchLabels:
+      app: fruits-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

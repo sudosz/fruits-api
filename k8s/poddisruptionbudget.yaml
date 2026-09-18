@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fruits-api
+  labels:
+    app: fruits-api
+    app.kubernetes.io/part-of: fruits-api
+spec:
+  # With 2 replicas this keeps one serving during node drains and upgrades.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: fruits-api
