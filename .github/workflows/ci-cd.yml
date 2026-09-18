@@ -47,7 +47,7 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.13.2
           args: --timeout=5m
@@ -90,7 +90,7 @@ jobs:
           category: gosec
 
       - name: Scan filesystem and manifests with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
@@ -248,7 +248,7 @@ jobs:
           sbom: true
 
       - name: Scan published image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: sarif
