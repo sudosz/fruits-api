@@ -39,9 +39,7 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: RESTful service for managing fruits, backed by PostgreSQL.
-  license:
-    name: MIT
+  description: RESTful API for managing fruits, backed by PostgreSQL.
   title: Fruits API
   version: "1.0"
 paths:

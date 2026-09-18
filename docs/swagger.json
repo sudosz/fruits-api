@@ -5,12 +5,9 @@
     ],
     "swagger": "2.0",
     "info": {
-        "description": "RESTful service for managing fruits, backed by PostgreSQL.",
+        "description": "RESTful API for managing fruits, backed by PostgreSQL.",
         "title": "Fruits API",
         "contact": {},
-        "license": {
-            "name": "MIT"
-        },
         "version": "1.0"
     },
     "host": "localhost:8080",
