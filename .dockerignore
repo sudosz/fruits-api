@@ -1,0 +1,15 @@
+.git
+.github
+.gitignore
+.dockerignore
+.claude
+CLAUDE.md
+KNOWLEDGE_BASE.md
+README.md
+LICENSE
+k8s
+fruits-api
+*.env
+.env*
+*.md
+!docs/**
