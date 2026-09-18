@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fruits-api-config
+  labels:
+    app: fruits-api
+data:
+  PORT: "8080"
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: fruitsdb
+  DB_SSLMODE: disable
+  GIN_MODE: release
