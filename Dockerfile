@@ -8,7 +8,9 @@ FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
-# hadolint ignore=DL3018 # Alpine repos do not retain old package versions, so pinning breaks rebuilds
+# Alpine repositories do not retain superseded package versions, so pinning apk
+# versions makes rebuilds fail once the package index moves forward.
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates git
 
 WORKDIR /src
@@ -26,7 +28,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 FROM alpine:3.20 AS runtime
 
-# hadolint ignore=DL3018 # Alpine repos do not retain old package versions, so pinning breaks rebuilds
+# Alpine repositories do not retain superseded package versions, so pinning apk
+# versions makes rebuilds fail once the package index moves forward.
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates curl \
     && adduser -D -u 10001 appuser
 
