@@ -1,10 +1,15 @@
 services:
   db:
     image: postgres:16-alpine
+    container_name: fruits-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: fruitsdb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    # Not published to the host: only the api service needs to reach it.
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -12,10 +17,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   api:
-    build: .
+    build:
+      context: .
+    container_name: fruits-api
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
@@ -30,7 +39,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    # The binary is static and writes nothing outside /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   postgres_data:

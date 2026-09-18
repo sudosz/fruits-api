@@ -1,26 +1,32 @@
 # syntax=docker/dockerfile:1
 
-# ---- Builder ----
 # gin v1.12 and the swaggo toolchain require Go 1.25, so the builder tracks it.
-FROM golang:1.25-alpine AS builder
+# TARGETOS/TARGETARCH come from buildx, which is how the multi-arch images
+# (linux/amd64 + linux/arm64) are produced without emulating the compiler.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN apk add --no-cache ca-certificates git
 
 WORKDIR /src
 
-# Copy manifests first so dependency download is cached across code changes.
+# Copy manifests first so dependency download stays cached across source edits.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download && go mod verify
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /out/fruits-api ./cmd/api
+# Static, reproducible binary: no libc dependency and no build paths embedded,
+# so the runtime image needs no toolchain.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-w -s" -o /out/fruits-api ./cmd/api
 
-# ---- Runtime ----
-FROM alpine:3.20
+FROM alpine:3.20 AS runtime
 
 RUN apk add --no-cache ca-certificates curl \
- && adduser -D -u 10001 appuser
+    && adduser -D -u 10001 appuser
 
 WORKDIR /app
 
@@ -32,6 +38,6 @@ USER appuser
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -fsS http://localhost:8080/healthz || exit 1
+    CMD curl -fsS http://localhost:8080/healthz || exit 1
 
 ENTRYPOINT ["/app/fruits-api"]
