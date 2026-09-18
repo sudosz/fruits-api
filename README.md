@@ -118,7 +118,7 @@ go test -v ./...
 go test -v -race ./...
 ```
 
-Handler tests are integration tests: they drive the real router through `httptest` against a real Postgres, rather than mocking the database. When no database is reachable they skip, so the suite stays runnable on a laptop; CI provides a `postgres:16-alpine` service container and **fails the build if any integration test skips**, so they always execute for real there. They truncate the `fruits` table before each test, so point them at a throwaway database. Middleware has its own unit tests that need no database.
+Handler tests are integration tests: they drive the real router through `httptest` against a real Postgres, rather than mocking the database. When no database is reachable they skip, so the suite stays runnable on a laptop; CI provides a `postgres:16-alpine` service container and fails the build if any integration test skips, so they always execute for real there. They truncate the `fruits` table before each test, so point them at a throwaway database. Middleware has its own unit tests that need no database.
 
 ## Linting and security scanning
 
@@ -192,7 +192,7 @@ This project was built with an AI coding assistant (Claude Code) driving the imp
 
 **Architectural choices and why**
 
-- **Gin** — small, fast HTTP router with first-class swaggo integration, so the OpenAPI spec is generated from the handlers themselves instead of drifting in a separate file.
+- **Gin** — small, fast HTTP router with a swaggo integration, so the OpenAPI spec is generated from the handlers themselves instead of drifting in a separate file.
 - **`database/sql` + `lib/pq`, no ORM** — the data model is one table and three columns; parameterized SQL is clearer than ORM configuration and keeps queries injection-safe.
 - **Handlers talk to the database directly** — a repository or service layer would add indirection without a second consumer or second storage backend to justify it.
 - **Context-aware database calls** — `Connect`, `Migrate`, and every query take a context, so startup retries and shutdown cancel cleanly instead of hanging a pod through its probe deadlines.
@@ -203,10 +203,10 @@ This project was built with an AI coding assistant (Claude Code) driving the imp
 - **Cross-compilation instead of emulation for multi-arch** — the builder stage stays on the native platform and Go cross-compiles to `TARGETARCH`, so arm64 images build in seconds rather than under QEMU.
 - **Defense in depth over a WAF** — security headers, an 8 KiB body limit, and a per-IP token-bucket rate limiter live in the application, so the guarantees hold regardless of what sits in front of it. Proxy trust is off by default so client IPs cannot be spoofed via `X-Forwarded-For`.
 - **Secrets out of git** — a committed Secret manifest is a credential leak even in a demo, so only a `REPLACE_ME` template is tracked and real Secrets are created out of band.
-- **Signed images with SBOM and provenance** — consumers can verify what they are running and where it came from, which is the supply-chain half of security that scanners alone do not cover.
+- **Signed images with SBOM and provenance** — consumers can verify what they are running and where it came from, which a vulnerability scanner cannot tell them.
 - **`/healthz` pings the database** — a probe that only proves the process is alive would keep routing traffic to a replica that cannot serve requests.
 - **Graceful shutdown** — draining in-flight requests on `SIGTERM` avoids dropped connections during rolling deploys.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT. See `LICENSE`.
