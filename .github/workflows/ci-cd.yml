@@ -27,9 +27,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -47,18 +47,18 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1.6
+          version: v2.13.2
           args: --timeout=5m
 
   sast:
     name: SAST
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -67,7 +67,7 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -100,9 +100,9 @@ jobs:
       DB_NAME: fruitsdb
       DB_SSLMODE: disable
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -111,7 +111,7 @@ jobs:
         run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
@@ -124,9 +124,9 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -148,7 +148,7 @@ jobs:
     name: Helm lint & template
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: azure/setup-helm@v4
         with:
@@ -179,9 +179,9 @@ jobs:
     needs: [lint, sast, test, codeql]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
 
       - uses: docker/setup-buildx-action@v3
 
@@ -202,7 +202,7 @@ jobs:
         run: docker save -o /tmp/image.tar ${{ env.LOCAL_IMAGE }}
 
       - name: Upload image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: container-image
           path: /tmp/image.tar
@@ -216,10 +216,10 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Download image artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: container-image
           path: /tmp
@@ -228,7 +228,7 @@ jobs:
         run: docker load -i /tmp/image.tar
 
       - name: Trivy image scan (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.LOCAL_IMAGE }}
@@ -244,7 +244,7 @@ jobs:
           category: trivy-image
 
       - name: Trivy image scan (gate)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.LOCAL_IMAGE }}
@@ -265,9 +265,9 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
 
       - uses: docker/setup-buildx-action@v3
 
@@ -280,7 +280,7 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -320,7 +320,7 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: azure/setup-helm@v4
         with:
@@ -338,7 +338,7 @@ jobs:
           head -40 /tmp/prod-rendered.yaml
 
       - name: Upload chart artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: helm-chart
           path: /tmp/charts/*.tgz

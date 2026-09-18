@@ -27,7 +27,7 @@ func TestSecurityHeaders(t *testing.T) {
 	router := newEngine(middleware.SecurityHeaders())
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 
 	want := map[string]string{
 		"X-Content-Type-Options":       "nosniff",
@@ -51,7 +51,7 @@ func TestSecurityHeaders(t *testing.T) {
 func TestBodyLimitRejectsOversizedBody(t *testing.T) {
 	router := newEngine(middleware.BodyLimit(16))
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 64)))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 64)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -68,7 +68,7 @@ func TestBodyLimitRejectsOversizedBody(t *testing.T) {
 func TestBodyLimitAllowsSmallBody(t *testing.T) {
 	router := newEngine(middleware.BodyLimit(1024))
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"fruit":"apple"}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"fruit":"apple"}`))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -84,7 +84,7 @@ func TestRateLimitBlocksBurstOverflow(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "192.0.2.10:1234"
 		router.ServeHTTP(rec, req)
 
@@ -94,7 +94,7 @@ func TestRateLimitBlocksBurstOverflow(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "192.0.2.10:1234"
 	router.ServeHTTP(rec, req)
 
@@ -113,7 +113,7 @@ func TestRateLimitIsPerClientIP(t *testing.T) {
 	router := newEngine(middleware.RateLimit(1, 1, testReapEvery))
 
 	first := httptest.NewRecorder()
-	reqA := httptest.NewRequest(http.MethodGet, "/", nil)
+	reqA := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	reqA.RemoteAddr = "192.0.2.20:1111"
 	router.ServeHTTP(first, reqA)
 	if first.Code != http.StatusOK {
@@ -121,7 +121,7 @@ func TestRateLimitIsPerClientIP(t *testing.T) {
 	}
 
 	second := httptest.NewRecorder()
-	reqB := httptest.NewRequest(http.MethodGet, "/", nil)
+	reqB := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	reqB.RemoteAddr = "192.0.2.21:2222"
 	router.ServeHTTP(second, reqB)
 	if second.Code != http.StatusOK {
@@ -129,7 +129,7 @@ func TestRateLimitIsPerClientIP(t *testing.T) {
 	}
 
 	third := httptest.NewRecorder()
-	reqC := httptest.NewRequest(http.MethodGet, "/", nil)
+	reqC := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	reqC.RemoteAddr = "192.0.2.20:1111"
 	router.ServeHTTP(third, reqC)
 	if third.Code != http.StatusTooManyRequests {
@@ -142,7 +142,7 @@ func TestRateLimitDisabledWhenZero(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "192.0.2.30:3333"
 		router.ServeHTTP(rec, req)
 

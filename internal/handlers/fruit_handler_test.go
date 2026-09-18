@@ -64,7 +64,7 @@ func do(t *testing.T, router *gin.Engine, method, target, body string) *httptest
 		reader = strings.NewReader(body)
 	}
 
-	req := httptest.NewRequest(method, target, reader)
+	req := httptest.NewRequestWithContext(t.Context(), method, target, reader)
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
