@@ -111,7 +111,7 @@ jobs:
         run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
@@ -202,7 +202,7 @@ jobs:
         run: docker save -o /tmp/image.tar ${{ env.LOCAL_IMAGE }}
 
       - name: Upload image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: container-image
           path: /tmp/image.tar
@@ -338,7 +338,7 @@ jobs:
           head -40 /tmp/prod-rendered.yaml
 
       - name: Upload chart artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: helm-chart
           path: /tmp/charts/*.tgz
