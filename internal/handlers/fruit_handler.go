@@ -48,7 +48,10 @@ func (h *FruitHandler) ListFruits(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "failed to fetch fruits"})
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		// The rows are fully drained below; a close error only matters for logs.
+		_ = rows.Close()
+	}()
 
 	// Non-nil slice so an empty table marshals to [] rather than null.
 	fruits := make([]models.Fruit, 0)

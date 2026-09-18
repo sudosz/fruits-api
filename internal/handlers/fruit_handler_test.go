@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -25,23 +27,28 @@ func setup(t *testing.T) (*gin.Engine, *sql.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	t.Cleanup(cancel)
+
 	db, err := sql.Open("postgres", config.Load().DSN())
 	if err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}
-	if err := db.Ping(); err != nil {
-		db.Close()
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Logf("close database: %v", err)
+		}
+	})
+
+	if err := db.PingContext(ctx); err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}
-	if err := database.Migrate(db); err != nil {
-		db.Close()
+	if err := database.Migrate(ctx, db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if _, err := db.Exec("TRUNCATE fruits RESTART IDENTITY"); err != nil {
-		db.Close()
+	if _, err := db.ExecContext(ctx, "TRUNCATE fruits RESTART IDENTITY"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
 
 	router := gin.New()
 	handlers.New(db).RegisterRoutes(router)
@@ -50,7 +57,7 @@ func setup(t *testing.T) (*gin.Engine, *sql.DB) {
 
 func do(t *testing.T, router *gin.Engine, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req := httptest.NewRequestWithContext(t.Context(), method, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

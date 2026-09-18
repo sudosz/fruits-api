@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS fruits (
 // Connect opens a pool against PostgreSQL and waits for it to answer. The
 // retry loop exists because compose and Kubernetes can start the API before the
 // database finishes accepting connections.
-func Connect(cfg config.Config) (*sql.DB, error) {
+func Connect(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	db, err := sql.Open("postgres", cfg.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
@@ -29,9 +30,14 @@ func Connect(cfg config.Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(25)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(time.Minute)
 
-	if err := ping(db, 10, 2*time.Second); err != nil {
-		db.Close()
+	if err := ping(ctx, db, 10, 2*time.Second); err != nil {
+		// Closing a pool that never became usable cannot fail in a way the
+		// caller could act on, so the original error is the one returned.
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, fmt.Errorf("%w (close pool: %w)", err, closeErr)
+		}
 		return nil, err
 	}
 
@@ -39,20 +45,31 @@ func Connect(cfg config.Config) (*sql.DB, error) {
 }
 
 // Migrate creates the fruits table when it is missing.
-func Migrate(db *sql.DB) error {
-	if _, err := db.Exec(schema); err != nil {
+func Migrate(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("create fruits table: %w", err)
 	}
 	return nil
 }
 
-func ping(db *sql.DB, attempts int, wait time.Duration) error {
+func ping(ctx context.Context, db *sql.DB, attempts int, wait time.Duration) error {
 	var err error
-	for i := 0; i < attempts; i++ {
-		if err = db.Ping(); err == nil {
+	for i := range attempts {
+		if err = db.PingContext(ctx); err == nil {
 			return nil
 		}
-		time.Sleep(wait)
+		if ctx.Err() != nil {
+			return fmt.Errorf("postgres unreachable after %d attempts: %w", i+1, err)
+		}
+
+		// Sleep, but give up immediately if the caller cancels while waiting.
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("postgres unreachable after %d attempts: %w", i+1, err)
+		case <-timer.C:
+		}
 	}
 	return fmt.Errorf("postgres unreachable after %d attempts: %w", attempts, err)
 }
