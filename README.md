@@ -1,5 +1,14 @@
 # Fruits API
 
+[![CI/CD](https://github.com/sudosz/fruits-api/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/sudosz/fruits-api/actions/workflows/ci-cd.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/sudosz/fruits-api/ci-cd.yml?branch=main&label=codeql&logo=github)](https://github.com/sudosz/fruits-api/security/code-scanning)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sudosz/fruits-api)](https://goreportcard.com/report/github.com/sudosz/fruits-api)
+[![Go Version](https://img.shields.io/badge/go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
+[![GHCR Image](https://img.shields.io/badge/ghcr.io-sudosz%2Ffruits--api-2496ED?logo=docker&logoColor=white)](https://github.com/sudosz/fruits-api/pkgs/container/fruits-api)
+[![Platforms](https://img.shields.io/badge/platforms-linux%2Famd64%20%7C%20linux%2Farm64-informational)](https://github.com/sudosz/fruits-api/pkgs/container/fruits-api)
+[![Signed with cosign](https://img.shields.io/badge/supply%20chain-cosign%20%7C%20SBOM%20%7C%20provenance-4B32C3?logo=sigstore&logoColor=white)](https://docs.sigstore.dev/cosign/overview/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 RESTful service for managing fruits, written in Go with Gin and backed by PostgreSQL. Ships with Swagger docs, a multi-stage multi-arch container image, Docker Compose for local work, hardened Kubernetes manifests, and a GitHub Actions pipeline that lints, scans, tests against a real Postgres, and publishes signed images with SBOM and provenance to GHCR.
 
 ## Features
