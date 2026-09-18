@@ -1,8 +1,21 @@
+x-security-opts: &security-opts
+  security_opt:
+    - no-new-privileges:true
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  <<: *security-opts
+
 services:
   db:
-    image: postgres:16-alpine
+    <<: *service-defaults
+    image: postgres:17-alpine
     container_name: fruits-db
-    restart: unless-stopped
     environment:
       POSTGRES_DB: fruitsdb
       POSTGRES_USER: postgres
@@ -17,14 +30,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    security_opt:
-      - no-new-privileges:true
 
   api:
+    <<: *service-defaults
     build:
       context: .
     container_name: fruits-api
-    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
@@ -51,8 +62,6 @@ services:
       - /tmp
     cap_drop:
       - ALL
-    security_opt:
-      - no-new-privileges:true
 
 volumes:
   postgres_data:

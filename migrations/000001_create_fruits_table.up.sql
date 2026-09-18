@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS fruits (
+    id SERIAL PRIMARY KEY,
+    fruit VARCHAR(100) NOT NULL,
+    color VARCHAR(50) NOT NULL
+);

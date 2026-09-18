@@ -1,35 +1,26 @@
 # syntax=docker/dockerfile:1
 
-# The module tracks Go 1.26, which the patched golang.org/x dependencies require.
-# TARGETOS/TARGETARCH come from buildx, which is how the multi-arch images
-# (linux/amd64 + linux/arm64) are produced without emulating the compiler.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
+ENV GOPROXY=https://goproxy.io,direct
 
-# Alpine repositories do not retain superseded package versions, so pinning apk
-# versions makes rebuilds fail once the package index moves forward.
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates git
 
 WORKDIR /src
 
-# Copy manifests first so dependency download stays cached across source edits.
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
 COPY . .
 
-# Static, reproducible binary: no libc dependency and no build paths embedded,
-# so the runtime image needs no toolchain.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-w -s" -o /out/fruits-api ./cmd/api
 
 FROM alpine:3.20 AS runtime
 
-# Alpine repositories do not retain superseded package versions, so pinning apk
-# versions makes rebuilds fail once the package index moves forward.
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates curl \
     && adduser -D -u 10001 appuser
@@ -37,7 +28,6 @@ RUN apk add --no-cache ca-certificates curl \
 WORKDIR /app
 
 COPY --from=builder /out/fruits-api /app/fruits-api
-COPY --from=builder /src/docs /app/docs
 
 USER appuser
 

@@ -10,14 +10,13 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -28,24 +27,24 @@ import (
 	"github.com/sudosz/fruits-api/internal/database"
 	"github.com/sudosz/fruits-api/internal/handlers"
 	"github.com/sudosz/fruits-api/internal/middleware"
+	"github.com/sudosz/fruits-api/internal/repository"
+	"github.com/sudosz/fruits-api/internal/service"
 )
 
 func main() {
-	// run() owns every deferred cleanup so that a fatal error still closes the
-	// database pool; log.Fatal in main would skip those defers.
 	if err := run(); err != nil {
-		log.Fatalf("fruits-api: %v", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
 	cfg := config.Load()
 
-	// Signal-aware context: startup retries and shutdown share one cancel path.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	connectCtx, cancelConnect := context.WithTimeout(ctx, 30*time.Second)
+	connectCtx, cancelConnect := context.WithTimeout(ctx, cfg.DBConnectTimeout)
 	defer cancelConnect()
 
 	db, err := database.Connect(connectCtx, cfg)
@@ -58,58 +57,53 @@ func run() error {
 		}
 	}()
 
-	migrateCtx, cancelMigrate := context.WithTimeout(ctx, 15*time.Second)
+	migrateCtx, cancelMigrate := context.WithTimeout(ctx, cfg.DBMigrateTimeout)
 	defer cancelMigrate()
 
 	if err := database.Migrate(migrateCtx, db); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
 
-	router, err := newRouter(db)
+	// Config -> DB -> Repository -> Service -> Handler -> Router.
+	repo := repository.NewFruitRepository(db)
+	svc := service.NewFruitService(repo)
+	handler := handlers.NewFruitHandler(svc)
+
+	router, err := newRouter(cfg, handler)
 	if err != nil {
 		return fmt.Errorf("build router: %w", err)
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: router,
-		// Timeouts bound how long a single connection can tie up a worker,
-		// which is the cheapest defense against slowloris-style clients.
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 20,
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		MaxHeaderBytes:    cfg.MaxHeaderBytes,
 	}
 
-	serveErr := make(chan error, 1)
 	go func() {
-		log.Printf("listening on %s", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serveErr <- fmt.Errorf("listen: %w", err)
-			return
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("graceful shutdown: %v", err)
 		}
-		serveErr <- nil
 	}()
 
-	select {
-	case err := <-serveErr:
-		return err
-	case <-ctx.Done():
-		log.Println("shutting down")
+	log.Printf("listening on %s", srv.Addr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelShutdown()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("graceful shutdown: %w", err)
-	}
-	log.Println("stopped")
 	return nil
 }
 
-func newRouter(db *sql.DB) (*gin.Engine, error) {
+func newRouter(cfg config.Config, handler *handlers.FruitHandler) (*gin.Engine, error) {
 	router := gin.New()
 
 	// Client IPs come from the platform's load balancer, not arbitrary
@@ -127,11 +121,11 @@ func newRouter(db *sql.DB) (*gin.Engine, error) {
 			SkipPaths: []string{"/healthz"},
 		}),
 		middleware.SecurityHeaders(),
-		middleware.BodyLimit(middleware.MaxBodyBytes),
-		middleware.RateLimit(50, 100),
+		middleware.BodyLimit(cfg.MaxBodyBytes),
+		middleware.RateLimit(cfg.RateLimitPerSecond, cfg.RateLimitBurst, cfg.RateLimitReapEvery),
 	)
 
-	handlers.New(db).RegisterRoutes(router)
+	handler.RegisterRoutes(router)
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	return router, nil

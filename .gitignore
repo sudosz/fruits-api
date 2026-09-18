@@ -1,5 +1,6 @@
 # Local agent / knowledge files
 KNOWLEDGE_BASE.md
+WORKLOG.md
 CLAUDE.md
 CLAUDE.local.md
 .claude/
@@ -17,7 +18,8 @@ CLAUDE.local.md
 /bin/
 /build/
 /dist/
-fruits-api
+# Compiled binary only, anchored so charts/fruits-api/ stays tracked
+/fruits-api
 *.exe
 *.exe~
 *.dll

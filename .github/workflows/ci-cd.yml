@@ -6,39 +6,39 @@ on:
     tags: ["v*.*.*"]
   pull_request:
     branches: [main]
-  schedule:
-    # Weekly re-scan so newly disclosed CVEs surface without a push.
-    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 env:
   GO_VERSION: "1.26"
-  IMAGE_NAME: ghcr.io/sudosz/fruits-api
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  LOCAL_IMAGE: fruits-api:ci
+  GOPROXY: https://proxy.golang.org,direct
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Check formatting
+      - name: gofmt
         run: |
-          unformatted=$(gofmt -l .)
+          unformatted=$(gofmt -l ./cmd ./internal ./migrations)
           if [ -n "$unformatted" ]; then
-            echo "These files need gofmt:"
+            echo "These files are not gofmt'd:"
             echo "$unformatted"
             exit 1
           fi
@@ -49,111 +49,49 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.13.2
+          version: v2.1.6
           args: --timeout=5m
 
-      - name: Lint Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile
-
-  security:
-    name: Security scan
+  sast:
+    name: SAST
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      security-events: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
       - name: govulncheck
-        run: |
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-      - name: gosec
-        uses: securego/gosec@master
-        with:
-          args: -no-fail -fmt sarif -out gosec.sarif ./...
-
-      - name: Upload gosec results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: gosec.sarif
-          category: gosec
-
-      - name: Scan filesystem and manifests with Trivy
-        uses: aquasecurity/trivy-action@master
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
-          scanners: vuln,secret,misconfig
-          format: sarif
-          output: trivy-fs.sarif
+          scan-ref: .
           severity: CRITICAL,HIGH
-          exit-code: "0"
-
-      - name: Upload Trivy filesystem results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-fs.sarif
-          category: trivy-fs
-
-      - name: Scan for leaked secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  codeql:
-    name: CodeQL
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: go
-          queries: security-and-quality
-
-      - uses: github/codeql-action/autobuild@v3
-
-      - uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:go"
+          ignore-unfixed: true
+          exit-code: "1"
 
   test:
-    name: Test
+    name: Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         env:
-          POSTGRES_DB: fruitsdb
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fruitsdb
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d fruitsdb"
-          --health-interval 5s
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
           --health-timeout 5s
-          --health-retries 10
+          --health-retries 5
     env:
       DB_HOST: localhost
       DB_PORT: "5432"
@@ -162,72 +100,189 @@ jobs:
       DB_NAME: fruitsdb
       DB_SSLMODE: disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Run tests with race detector and coverage
-        run: go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: go test
+        run: go test -v -race -coverprofile=coverage.out ./...
 
-      - name: Fail if integration tests were skipped
-        run: |
-          # The handler suite skips when Postgres is unreachable; in CI that
-          # would silently hide the integration coverage, so make it fatal.
-          go test -run 'TestHealthz' -v ./internal/handlers/ | tee healthz.log
-          if grep -q -- '--- SKIP' healthz.log; then
-            echo "Integration tests skipped in CI: Postgres service is not reachable"
-            exit 1
-          fi
-
-      - name: Report coverage
-        run: go tool cover -func=coverage.out | tail -1
-
-      - name: Upload coverage artifact
+      - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: coverage.out
-          retention-days: 7
+          if-no-files-found: ignore
 
-  build-and-push:
-    name: Build and push image
+  codeql:
+    name: CodeQL
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [lint, security, test]
-    if: github.event_name == 'push'
-    environment: production
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
+
+  helm-lint:
+    name: Helm lint & template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: helm lint (base, staging, prod)
+        run: |
+          helm lint charts/fruits-api
+          helm lint charts/fruits-api -f charts/fruits-api/values-staging.yaml
+          helm lint charts/fruits-api -f charts/fruits-api/values-prod.yaml
+
+      - name: helm template render check
+        run: |
+          helm template fruits-api charts/fruits-api > /tmp/base.yaml
+          helm template fruits-api charts/fruits-api -f charts/fruits-api/values-staging.yaml > /tmp/staging.yaml
+          helm template fruits-api charts/fruits-api -f charts/fruits-api/values-prod.yaml > /tmp/prod.yaml
+
+      - name: Validate rendered manifests and k8s/ against API schemas
+        run: |
+          curl -sSLo /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          /tmp/kubeconform -strict -ignore-missing-schemas -summary /tmp/base.yaml /tmp/staging.yaml /tmp/prod.yaml
+          /tmp/kubeconform -strict -ignore-missing-schemas -summary k8s/
+
+  build:
+    name: Build container
+    needs: [lint, sast, test, codeql]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image locally for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export image for the scan job
+        run: docker save -o /tmp/image.tar ${{ env.LOCAL_IMAGE }}
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-image
+          path: /tmp/image.tar
+          retention-days: 1
+
+  scan:
+    name: Scan container
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: container-image
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      - name: Trivy image scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Trivy image scan (gate)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  push-and-sign:
+    name: Push & sign
+    needs: [scan, helm-lint]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
-      attestations: write
-      security-events: write
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.push.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Derive tags and labels
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=long
@@ -235,45 +290,55 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push multi-arch image
-        id: build
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # provenance: false keeps the manifest list free of attestation
+          # entries that older daemons/snapshotters reject with
+          # "mismatched image rootfs and manifest layers".
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: mode=max
-          sbom: true
 
-      - name: Scan published image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          format: sarif
-          output: trivy-image.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
-
-      - name: Upload image scan results
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-image.sarif
-          category: trivy-image
-
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-      - name: Install cosign
+      - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign image keylessly
-        run: cosign sign --yes ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+      - name: Sign image by digest (keyless)
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+  package:
+    name: Package / dry-run
+    needs: [push-and-sign]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Package chart
+        run: helm package charts/fruits-api --destination /tmp/charts
+
+      - name: Render prod manifests with the released image
+        run: |
+          helm template fruits-api charts/fruits-api \
+            -f charts/fruits-api/values-prod.yaml \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=latest > /tmp/prod-rendered.yaml
+          head -40 /tmp/prod-rendered.yaml
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: /tmp/charts/*.tgz

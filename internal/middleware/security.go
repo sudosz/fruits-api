@@ -7,14 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/sudosz/fruits-api/internal/models"
 )
-
-// MaxBodyBytes caps request bodies. The largest legitimate payload is a small
-// JSON object, so anything bigger is either a mistake or an attempt to exhaust
-// memory.
-const MaxBodyBytes int64 = 8 << 10 // 8 KiB
 
 // SecurityHeaders sets conservative response headers for a JSON-only API.
 func SecurityHeaders() gin.HandlerFunc {
@@ -36,8 +29,8 @@ func SecurityHeaders() gin.HandlerFunc {
 func BodyLimit(maxBytes int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.ContentLength > maxBytes {
-			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, models.ErrorResponse{
-				Error: "request body too large",
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error": "request body too large",
 			})
 			return
 		}
@@ -49,7 +42,7 @@ func BodyLimit(maxBytes int64) gin.HandlerFunc {
 // RateLimit applies a per-client-IP token bucket. It is deliberately in-process:
 // it protects a single replica from a noisy client. Cluster-wide limits belong
 // at the ingress or gateway, which can see all replicas.
-func RateLimit(ratePerSecond float64, burst int) gin.HandlerFunc {
+func RateLimit(ratePerSecond float64, burst int, reapEvery time.Duration) gin.HandlerFunc {
 	if ratePerSecond <= 0 || burst <= 0 {
 		return func(c *gin.Context) { c.Next() }
 	}
@@ -59,13 +52,15 @@ func RateLimit(ratePerSecond float64, burst int) gin.HandlerFunc {
 		burst:   float64(burst),
 		buckets: make(map[string]*bucket),
 	}
-	go l.reap(10 * time.Minute)
+	if reapEvery > 0 {
+		go l.reap(reapEvery)
+	}
 
 	return func(c *gin.Context) {
 		if !l.allow(c.ClientIP()) {
 			c.Header("Retry-After", "1")
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, models.ErrorResponse{
-				Error: "rate limit exceeded",
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error": "rate limit exceeded",
 			})
 			return
 		}

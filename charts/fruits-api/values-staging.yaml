@@ -1,0 +1,40 @@
+# Staging overrides: helm upgrade --install fruits-api charts/fruits-api -f charts/fruits-api/values-staging.yaml
+
+replicaCount: 2
+
+image:
+  tag: latest
+  pullPolicy: Always
+
+config:
+  GIN_MODE: release
+  DB_HOST: postgres
+  DB_NAME: fruitsdb
+  DB_SSLMODE: require
+  RATE_LIMIT_PER_SECOND: "25"
+  RATE_LIMIT_BURST: "50"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 300m
+    memory: 192Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+secret:
+  create: true
+  data:
+    DB_USER: fruits_staging
+    DB_PASSWORD: change-me-in-staging

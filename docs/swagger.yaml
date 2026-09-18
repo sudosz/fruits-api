@@ -3,20 +3,14 @@ definitions:
   models.CreateFruitRequest:
     properties:
       color:
-        example: yellow
+        example: red
         type: string
       fruit:
-        example: banana
+        example: apple
         type: string
     required:
     - color
     - fruit
-    type: object
-  models.ErrorResponse:
-    properties:
-      error:
-        example: fruit not found
-        type: string
     type: object
   models.Fruit:
     properties:
@@ -29,12 +23,9 @@ definitions:
       id:
         example: 1
         type: integer
-    type: object
-  models.HealthResponse:
-    properties:
-      status:
-        example: ok
-        type: string
+    required:
+    - color
+    - fruit
     type: object
 host: localhost:8080
 info:
@@ -59,7 +50,9 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
       summary: List all fruits
       tags:
       - fruits
@@ -84,11 +77,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
       summary: Create a fruit
       tags:
       - fruits
@@ -111,15 +108,21 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get a fruit by ID
       tags:
       - fruits
@@ -132,11 +135,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.HealthResponse'
+            additionalProperties:
+              type: string
+            type: object
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/models.ErrorResponse'
+            additionalProperties:
+              type: string
+            type: object
       summary: Health check
       tags:
       - operations
