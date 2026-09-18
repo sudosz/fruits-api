@@ -52,3 +52,8 @@ tmp/
 *~
 .DS_Store
 Thumbs.db
+
+# Real Kubernetes Secret manifests (use k8s/secret.example.yaml as template)
+k8s/secret.yaml
+k8s/secret.local.yaml
+k8s/*secret*.local.yaml
