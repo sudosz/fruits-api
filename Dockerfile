@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-w -s" -o /out/fruits-api ./cmd/api
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.24 AS runtime
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates curl \
